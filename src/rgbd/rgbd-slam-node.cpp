@@ -66,19 +66,8 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
 
 void RgbdSlamNode::PublishPointCloud()
 {
-    // Retrieve all map points
-    // Note: If you only want currently tracked points, you can use:
-    // std::vector<ORB_SLAM3::MapPoint*> mp = m_SLAM->GetTrackedMapPoints();
-    std::vector<ORB_SLAM3::MapPoint*> mp;
-    
-    // Attempting to safely get points from the active map or atlas
-    if(m_SLAM->GetAtlas()){
-        std::vector<ORB_SLAM3::Map*> maps = m_SLAM->GetAtlas()->GetAllMaps();
-        for(ORB_SLAM3::Map* map : maps) {
-            std::vector<ORB_SLAM3::MapPoint*> map_pts = map->GetAllMapPoints();
-            mp.insert(mp.end(), map_pts.begin(), map_pts.end());
-        }
-    }
+    // Retrieve tracked map points (to avoid Atlas structure changes between forks)
+    std::vector<ORB_SLAM3::MapPoint*> mp = m_SLAM->GetTrackedMapPoints();
 
     if (mp.empty()) return;
 
@@ -113,10 +102,10 @@ void RgbdSlamNode::PublishPointCloud()
     {
         if (pMP && !pMP->isBad())
         {
-            cv::Mat pos = pMP->GetWorldPos();
-            *iter_x = pos.at<float>(0);
-            *iter_y = pos.at<float>(1);
-            *iter_z = pos.at<float>(2);
+            auto pos = pMP->GetWorldPos();
+            *iter_x = pos(0);
+            *iter_y = pos(1);
+            *iter_z = pos(2);
             
             ++iter_x;
             ++iter_y;
