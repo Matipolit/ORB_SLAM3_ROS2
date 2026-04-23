@@ -67,15 +67,21 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
     }
 
     m_SLAM->TrackRGBD(cv_ptrRGB->image, cv_ptrD->image, Utility::StampToSec(msgRGB->header.stamp));
+    std::cout << "DEBUG: TrackRGBD finished. Now calling PublishPointCloud..." << std::endl;
     PublishPointCloud();
 }
 
 void RgbdSlamNode::PublishPointCloud()
 {
-    // Retrieve tracked map points (to avoid Atlas structure changes between forks)
+    // Retrieve tracked map points
     std::vector<ORB_SLAM3::MapPoint*> mp = m_SLAM->GetTrackedMapPoints();
 
-    if (mp.empty()) return;
+    if (mp.empty()) {
+        std::cout << "DEBUG: GetTrackedMapPoints returned empty. Nothing to publish this frame." << std::endl;
+        return;
+    }
+    
+    std::cout << "DEBUG: Publishing " << mp.size() << " points to /orb_slam3/point_cloud" << std::endl;
 
     sensor_msgs::msg::PointCloud2 cloud;
     cloud.header.stamp = this->now();
