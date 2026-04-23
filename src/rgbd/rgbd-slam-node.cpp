@@ -17,8 +17,9 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System* pSLAM)
     rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
     auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 10), qos_profile);
 
-    rgb_sub = std::make_shared<message_filters::Subscriber<ImageMsg> >(this, "camera/rgb", qos.get_rmw_qos_profile());
-    depth_sub = std::make_shared<message_filters::Subscriber<ImageMsg> >(this, "camera/depth", qos.get_rmw_qos_profile());
+    // Let's use SystemDefaultsQoS which is more forgiving, or specifically SensorDataQoS
+    rgb_sub = std::make_shared<message_filters::Subscriber<ImageMsg> >(this, "camera/rgb", rclcpp::SensorDataQoS().get_rmw_qos_profile());
+    depth_sub = std::make_shared<message_filters::Subscriber<ImageMsg> >(this, "camera/depth", rclcpp::SensorDataQoS().get_rmw_qos_profile());
 
     syncApproximate = std::make_shared<message_filters::Synchronizer<approximate_sync_policy> >(approximate_sync_policy(10), *rgb_sub, *depth_sub);
     syncApproximate->registerCallback(&RgbdSlamNode::GrabRGBD, this);
@@ -41,6 +42,8 @@ RgbdSlamNode::~RgbdSlamNode()
 
 void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::SharedPtr msgD)
 {
+    RCLCPP_INFO_ONCE(this->get_logger(), "GrabRGBD called for the first time! Synced an RGB and Depth pair.");
+
     // Copy the ros rgb image message to cv::Mat.
     try
     {
