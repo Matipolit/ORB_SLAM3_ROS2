@@ -15,6 +15,9 @@
 
 #include <cv_bridge/cv_bridge.hpp>
 
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud_conversion.hpp>
+
 #include "System.h"
 #include "Frame.h"
 #include "Map.h"
@@ -34,6 +37,9 @@ private:
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::Image, sensor_msgs::msg::Image> approximate_sync_policy;
 
     void GrabRGBD(const sensor_msgs::msg::Image::SharedPtr msgRGB, const sensor_msgs::msg::Image::SharedPtr msgD);
+
+    void PublishPointCloud();
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_pub;
 
     ORB_SLAM3::System* m_SLAM;
 
