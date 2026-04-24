@@ -18,7 +18,7 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
     finalized_ = false;
 
     pointcloud_enable_quality_filter_ = this->declare_parameter<bool>("pointcloud_quality_filter", true);
-    pointcloud_min_observations_ = std::max(1, this->declare_parameter<int>("pointcloud_min_observations", 3));
+    pointcloud_min_observations_ = std::max(1, static_cast<int>(this->declare_parameter<int>("pointcloud_min_observations", 3)));
     pointcloud_min_found_ratio_ = this->declare_parameter<double>("pointcloud_min_found_ratio", 0.25);
     pointcloud_min_found_ratio_ = std::max(0.0, std::min(1.0, pointcloud_min_found_ratio_));
     export_final_map_pcd_ = this->declare_parameter<bool>("export_final_map_pcd", true);
