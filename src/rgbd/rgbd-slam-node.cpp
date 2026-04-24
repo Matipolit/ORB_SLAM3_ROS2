@@ -8,9 +8,9 @@
 
 using std::placeholders::_1;
 
-RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System* pSLAM)
-:   Node("ORB_SLAM3_ROS2"),
-    m_SLAM(pSLAM)
+RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
+    : Node("ORB_SLAM3_ROS2"),
+      m_SLAM(pSLAM)
 {
     pcl_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("orb_slam3/point_cloud", 10);
 
@@ -18,12 +18,11 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System* pSLAM)
     auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 10), qos_profile);
 
     // Let's use SystemDefaultsQoS which is more forgiving, or specifically SensorDataQoS
-    rgb_sub = std::make_shared<message_filters::Subscriber<ImageMsg> >(this, "camera/rgb", rclcpp::SensorDataQoS().get_rmw_qos_profile());
-    depth_sub = std::make_shared<message_filters::Subscriber<ImageMsg> >(this, "camera/depth", rclcpp::SensorDataQoS().get_rmw_qos_profile());
+    rgb_sub = std::make_shared<message_filters::Subscriber<ImageMsg>>(this, "camera/rgb", rclcpp::SensorDataQoS().get_rmw_qos_profile());
+    depth_sub = std::make_shared<message_filters::Subscriber<ImageMsg>>(this, "camera/depth", rclcpp::SensorDataQoS().get_rmw_qos_profile());
 
-    syncApproximate = std::make_shared<message_filters::Synchronizer<approximate_sync_policy> >(approximate_sync_policy(10), *rgb_sub, *depth_sub);
+    syncApproximate = std::make_shared<message_filters::Synchronizer<approximate_sync_policy>>(approximate_sync_policy(10), *rgb_sub, *depth_sub);
     syncApproximate->registerCallback(&RgbdSlamNode::GrabRGBD, this);
-
 }
 
 RgbdSlamNode::~RgbdSlamNode()
@@ -35,7 +34,7 @@ RgbdSlamNode::~RgbdSlamNode()
     m_SLAM->SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
     m_SLAM->SaveTrajectoryTUM("FrameTrajectoryTUM.txt");
     m_SLAM->SaveTrajectoryKITTI("FrameTrajectoryKITTI.txt");
-    
+
     // Optional: Save map
     // m_SLAM->SaveMap("MyMap.osa");
 }
@@ -49,7 +48,7 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
     {
         cv_ptrRGB = cv_bridge::toCvShare(msgRGB);
     }
-    catch (cv_bridge::Exception& e)
+    catch (cv_bridge::Exception &e)
     {
         RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
         return;
@@ -60,7 +59,7 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
     {
         cv_ptrD = cv_bridge::toCvShare(msgD);
     }
-    catch (cv_bridge::Exception& e)
+    catch (cv_bridge::Exception &e)
     {
         RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
         return;
@@ -74,18 +73,19 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
 void RgbdSlamNode::PublishPointCloud()
 {
     // Retrieve tracked map points
-    std::vector<ORB_SLAM3::MapPoint*> mp = m_SLAM->GetTrackedMapPoints();
+    std::vector<ORB_SLAM3::MapPoint *> mp = m_SLAM->GetTrackedMapPoints();
 
-    if (mp.empty()) {
+    if (mp.empty())
+    {
         std::cout << "DEBUG: GetTrackedMapPoints returned empty. Nothing to publish this frame." << std::endl;
         return;
     }
-    
+
     std::cout << "DEBUG: Publishing " << mp.size() << " points to /orb_slam3/point_cloud" << std::endl;
 
     sensor_msgs::msg::PointCloud2 cloud;
     cloud.header.stamp = this->now();
-    cloud.header.frame_id = "map"; // the frame in which points are located
+    cloud.header.frame_id = "root"; // publish directly in root frame
 
     cloud.height = 1;
     cloud.width = 0;
@@ -94,12 +94,13 @@ void RgbdSlamNode::PublishPointCloud()
 
     sensor_msgs::PointCloud2Modifier modifier(cloud);
     modifier.setPointCloud2FieldsByString(1, "xyz");
-    
+
     // We count valid points first, or we can just resize up to mp.size() and adjust width later
     int valid_points = 0;
     for (auto pMP : mp)
     {
-        if (pMP && !pMP->isBad()) {
+        if (pMP && !pMP->isBad())
+        {
             valid_points++;
         }
     }
@@ -118,7 +119,7 @@ void RgbdSlamNode::PublishPointCloud()
             *iter_x = pos(0);
             *iter_y = pos(1);
             *iter_z = pos(2);
-            
+
             ++iter_x;
             ++iter_y;
             ++iter_z;
