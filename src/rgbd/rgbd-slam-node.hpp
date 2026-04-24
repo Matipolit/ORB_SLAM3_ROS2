@@ -17,6 +17,7 @@
 
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud_conversion.hpp>
+#include <builtin_interfaces/msg/time.hpp>
 
 #include "System.h"
 #include "Frame.h"
@@ -28,7 +29,7 @@
 class RgbdSlamNode : public rclcpp::Node
 {
 public:
-    RgbdSlamNode(ORB_SLAM3::System* pSLAM);
+    RgbdSlamNode(ORB_SLAM3::System *pSLAM);
 
     ~RgbdSlamNode();
 
@@ -38,18 +39,18 @@ private:
 
     void GrabRGBD(const sensor_msgs::msg::Image::SharedPtr msgRGB, const sensor_msgs::msg::Image::SharedPtr msgD);
 
-    void PublishPointCloud();
+    void PublishPointCloud(const builtin_interfaces::msg::Time &stamp);
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_pub;
 
-    ORB_SLAM3::System* m_SLAM;
+    ORB_SLAM3::System *m_SLAM;
 
     cv_bridge::CvImageConstPtr cv_ptrRGB;
     cv_bridge::CvImageConstPtr cv_ptrD;
 
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image> > rgb_sub;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image> > depth_sub;
+    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image>> rgb_sub;
+    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image>> depth_sub;
 
-    std::shared_ptr<message_filters::Synchronizer<approximate_sync_policy> > syncApproximate;
+    std::shared_ptr<message_filters::Synchronizer<approximate_sync_policy>> syncApproximate;
 };
 
 #endif

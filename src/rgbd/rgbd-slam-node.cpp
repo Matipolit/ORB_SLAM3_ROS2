@@ -67,10 +67,10 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
 
     m_SLAM->TrackRGBD(cv_ptrRGB->image, cv_ptrD->image, Utility::StampToSec(msgRGB->header.stamp));
     std::cout << "DEBUG: TrackRGBD finished. Now calling PublishPointCloud..." << std::endl;
-    PublishPointCloud();
+    PublishPointCloud(msgRGB->header.stamp);
 }
 
-void RgbdSlamNode::PublishPointCloud()
+void RgbdSlamNode::PublishPointCloud(const builtin_interfaces::msg::Time &stamp)
 {
     // Retrieve tracked map points
     std::vector<ORB_SLAM3::MapPoint *> mp = m_SLAM->GetTrackedMapPoints();
@@ -84,7 +84,7 @@ void RgbdSlamNode::PublishPointCloud()
     std::cout << "DEBUG: Publishing " << mp.size() << " points to /orb_slam3/point_cloud" << std::endl;
 
     sensor_msgs::msg::PointCloud2 cloud;
-    cloud.header.stamp = this->now();
+    cloud.header.stamp = stamp;
     cloud.header.frame_id = "root"; // publish directly in root frame
 
     cloud.height = 1;
