@@ -1,5 +1,7 @@
 #include "rgbd-slam-node.hpp"
 
+#include <cmath>
+#include <iomanip>
 #include <opencv2/core/core.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 
@@ -13,6 +15,27 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
       m_SLAM(pSLAM)
 {
     pcl_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("orb_slam3/point_cloud", 10);
+    finalized_ = false;
+
+    pointcloud_enable_quality_filter_ = this->declare_parameter<bool>("pointcloud_quality_filter", true);
+    pointcloud_min_observations_ = std::max(1, this->declare_parameter<int>("pointcloud_min_observations", 3));
+    pointcloud_min_found_ratio_ = this->declare_parameter<double>("pointcloud_min_found_ratio", 0.25);
+    pointcloud_min_found_ratio_ = std::max(0.0, std::min(1.0, pointcloud_min_found_ratio_));
+    export_final_map_pcd_ = this->declare_parameter<bool>("export_final_map_pcd", true);
+    final_map_pcd_path_ = this->declare_parameter<std::string>("final_map_pcd_path", "orbslam3_final_map.pcd");
+
+    RCLCPP_INFO(
+        this->get_logger(),
+        "Point cloud quality filter: %s (min_observations=%d, min_found_ratio=%.2f)",
+        pointcloud_enable_quality_filter_ ? "enabled" : "disabled",
+        pointcloud_min_observations_,
+        pointcloud_min_found_ratio_);
+
+    RCLCPP_INFO(
+        this->get_logger(),
+        "Final map export: %s (path=%s)",
+        export_final_map_pcd_ ? "enabled" : "disabled",
+        final_map_pcd_path_.c_str());
 
     rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
     auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 10), qos_profile);
@@ -27,16 +50,136 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
 
 RgbdSlamNode::~RgbdSlamNode()
 {
-    // Stop all threads
+    FinalizeSlamAndOutputs();
+}
+
+void RgbdSlamNode::FinalizeAndSaveOutputs()
+{
+    FinalizeSlamAndOutputs();
+}
+
+bool RgbdSlamNode::IsPointUsable(ORB_SLAM3::MapPoint *pMP) const
+{
+    if (!pMP || pMP->isBad())
+    {
+        return false;
+    }
+
+    const Eigen::Vector3f pos = pMP->GetWorldPos();
+    if (!std::isfinite(pos(0)) || !std::isfinite(pos(1)) || !std::isfinite(pos(2)))
+    {
+        return false;
+    }
+
+    if (!pointcloud_enable_quality_filter_)
+    {
+        return true;
+    }
+
+    if (pMP->Observations() < pointcloud_min_observations_)
+    {
+        return false;
+    }
+
+    if (static_cast<double>(pMP->GetFoundRatio()) < pointcloud_min_found_ratio_)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<Eigen::Vector3f> RgbdSlamNode::CollectUsablePoints(const std::vector<ORB_SLAM3::MapPoint *> &map_points) const
+{
+    std::vector<Eigen::Vector3f> points;
+    points.reserve(map_points.size());
+
+    for (auto pMP : map_points)
+    {
+        if (IsPointUsable(pMP))
+        {
+            points.push_back(pMP->GetWorldPos());
+        }
+    }
+
+    return points;
+}
+
+void RgbdSlamNode::WritePcdAscii(const std::string &file_path, const std::vector<Eigen::Vector3f> &points) const
+{
+    std::ofstream out(file_path);
+    if (!out.is_open())
+    {
+        RCLCPP_ERROR(this->get_logger(), "Failed to open final map PCD file: %s", file_path.c_str());
+        return;
+    }
+
+    out << "# .PCD v0.7\n";
+    out << "VERSION 0.7\n";
+    out << "FIELDS x y z\n";
+    out << "SIZE 4 4 4\n";
+    out << "TYPE F F F\n";
+    out << "COUNT 1 1 1\n";
+    out << "WIDTH " << points.size() << "\n";
+    out << "HEIGHT 1\n";
+    out << "VIEWPOINT 0 0 0 1 0 0 0\n";
+    out << "POINTS " << points.size() << "\n";
+    out << "DATA ascii\n";
+    out << std::fixed << std::setprecision(6);
+
+    for (const auto &p : points)
+    {
+        out << p(0) << " " << p(1) << " " << p(2) << "\n";
+    }
+
+    out.close();
+}
+
+void RgbdSlamNode::ExportFinalMapPcd()
+{
+    if (!export_final_map_pcd_)
+    {
+        return;
+    }
+
+    const std::vector<ORB_SLAM3::MapPoint *> all_map_points = m_SLAM->GetAllMapPoints();
+    if (all_map_points.empty())
+    {
+        RCLCPP_WARN(this->get_logger(), "Final map export skipped: ORB-SLAM returned no map points.");
+        return;
+    }
+
+    const std::vector<Eigen::Vector3f> filtered_points = CollectUsablePoints(all_map_points);
+    if (filtered_points.empty())
+    {
+        RCLCPP_WARN(this->get_logger(), "Final map export skipped: all map points were filtered out.");
+        return;
+    }
+
+    WritePcdAscii(final_map_pcd_path_, filtered_points);
+    RCLCPP_INFO(
+        this->get_logger(),
+        "Final ORB map exported to %s (%zu/%zu points kept).",
+        final_map_pcd_path_.c_str(),
+        filtered_points.size(),
+        all_map_points.size());
+}
+
+void RgbdSlamNode::FinalizeSlamAndOutputs()
+{
+    if (finalized_)
+    {
+        return;
+    }
+    finalized_ = true;
+
     m_SLAM->Shutdown();
+    ExportFinalMapPcd();
 
     // Save camera trajectory
     m_SLAM->SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
     m_SLAM->SaveTrajectoryTUM("FrameTrajectoryTUM.txt");
     m_SLAM->SaveTrajectoryKITTI("FrameTrajectoryKITTI.txt");
-
-    // Optional: Save map
-    // m_SLAM->SaveMap("MyMap.osa");
 }
 
 void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::SharedPtr msgD)
@@ -81,7 +224,12 @@ void RgbdSlamNode::PublishPointCloud(const builtin_interfaces::msg::Time &stamp)
         return;
     }
 
-    std::cout << "DEBUG: Publishing " << mp.size() << " points to /orb_slam3/point_cloud" << std::endl;
+    const std::vector<Eigen::Vector3f> filtered_points = CollectUsablePoints(mp);
+    if (filtered_points.empty())
+    {
+        std::cout << "DEBUG: All tracked points filtered out. Nothing to publish this frame." << std::endl;
+        return;
+    }
 
     sensor_msgs::msg::PointCloud2 cloud;
     cloud.header.stamp = stamp;
@@ -95,35 +243,23 @@ void RgbdSlamNode::PublishPointCloud(const builtin_interfaces::msg::Time &stamp)
     sensor_msgs::PointCloud2Modifier modifier(cloud);
     modifier.setPointCloud2FieldsByString(1, "xyz");
 
-    // We count valid points first, or we can just resize up to mp.size() and adjust width later
-    int valid_points = 0;
-    for (auto pMP : mp)
-    {
-        if (pMP && !pMP->isBad())
-        {
-            valid_points++;
-        }
-    }
+    std::cout << "DEBUG: Publishing " << filtered_points.size() << "/" << mp.size() << " filtered points to /orb_slam3/point_cloud" << std::endl;
 
-    modifier.resize(valid_points);
+    modifier.resize(filtered_points.size());
 
     sensor_msgs::PointCloud2Iterator<float> iter_x(cloud, "x");
     sensor_msgs::PointCloud2Iterator<float> iter_y(cloud, "y");
     sensor_msgs::PointCloud2Iterator<float> iter_z(cloud, "z");
 
-    for (auto pMP : mp)
+    for (const auto &pos : filtered_points)
     {
-        if (pMP && !pMP->isBad())
-        {
-            auto pos = pMP->GetWorldPos();
-            *iter_x = pos(0);
-            *iter_y = pos(1);
-            *iter_z = pos(2);
+        *iter_x = pos(0);
+        *iter_y = pos(1);
+        *iter_z = pos(2);
 
-            ++iter_x;
-            ++iter_y;
-            ++iter_z;
-        }
+        ++iter_x;
+        ++iter_y;
+        ++iter_z;
     }
 
     pcl_pub->publish(cloud);

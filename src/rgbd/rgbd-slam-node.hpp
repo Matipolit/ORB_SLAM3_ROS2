@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <fstream>
 #include <chrono>
+#include <string>
+#include <vector>
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/image.hpp"
@@ -33,6 +35,8 @@ public:
 
     ~RgbdSlamNode();
 
+    void FinalizeAndSaveOutputs();
+
 private:
     using ImageMsg = sensor_msgs::msg::Image;
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::Image, sensor_msgs::msg::Image> approximate_sync_policy;
@@ -40,7 +44,19 @@ private:
     void GrabRGBD(const sensor_msgs::msg::Image::SharedPtr msgRGB, const sensor_msgs::msg::Image::SharedPtr msgD);
 
     void PublishPointCloud(const builtin_interfaces::msg::Time &stamp);
+    bool IsPointUsable(ORB_SLAM3::MapPoint *pMP) const;
+    std::vector<Eigen::Vector3f> CollectUsablePoints(const std::vector<ORB_SLAM3::MapPoint *> &map_points) const;
+    void WritePcdAscii(const std::string &file_path, const std::vector<Eigen::Vector3f> &points) const;
+    void ExportFinalMapPcd();
+    void FinalizeSlamAndOutputs();
+
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_pub;
+    bool pointcloud_enable_quality_filter_;
+    int pointcloud_min_observations_;
+    double pointcloud_min_found_ratio_;
+    bool export_final_map_pcd_;
+    std::string final_map_pcd_path_;
+    bool finalized_;
 
     ORB_SLAM3::System *m_SLAM;
 

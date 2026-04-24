@@ -69,6 +69,7 @@ int main(int argc, char **argv)
     std::cout << "============================ " << std::endl;
 
     rclcpp::spin(node);
+    node->FinalizeAndSaveOutputs();
     rclcpp::shutdown();
 
     return 0;
