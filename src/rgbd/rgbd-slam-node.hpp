@@ -45,6 +45,7 @@ private:
 
     void PublishPointCloud(const builtin_interfaces::msg::Time &stamp);
     bool IsPointUsable(ORB_SLAM3::MapPoint *pMP) const;
+    Eigen::Vector3f TransformPointForOutput(const Eigen::Vector3f &point) const;
     std::vector<Eigen::Vector3f> CollectUsablePoints(const std::vector<ORB_SLAM3::MapPoint *> &map_points) const;
     void WritePcdAscii(const std::string &file_path, const std::vector<Eigen::Vector3f> &points) const;
     void ExportFinalMapPcd();
@@ -54,6 +55,8 @@ private:
     bool pointcloud_enable_quality_filter_;
     int pointcloud_min_observations_;
     double pointcloud_min_found_ratio_;
+    double pointcloud_max_distance_;
+    bool pointcloud_apply_optical_to_ros_transform_;
     bool export_final_map_pcd_;
     std::string final_map_pcd_path_;
     bool finalized_;

@@ -21,6 +21,9 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
     pointcloud_min_observations_ = std::max(1, static_cast<int>(this->declare_parameter<int>("pointcloud_min_observations", 3)));
     pointcloud_min_found_ratio_ = this->declare_parameter<double>("pointcloud_min_found_ratio", 0.25);
     pointcloud_min_found_ratio_ = std::max(0.0, std::min(1.0, pointcloud_min_found_ratio_));
+    pointcloud_max_distance_ = this->declare_parameter<double>("pointcloud_max_distance", 0.0);
+    pointcloud_max_distance_ = std::max(0.0, pointcloud_max_distance_);
+    pointcloud_apply_optical_to_ros_transform_ = this->declare_parameter<bool>("pointcloud_apply_optical_to_ros_transform", true);
     export_final_map_pcd_ = this->declare_parameter<bool>("export_final_map_pcd", true);
     final_map_pcd_path_ = this->declare_parameter<std::string>("final_map_pcd_path", "orbslam3_final_map.pcd");
 
@@ -30,6 +33,13 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
         pointcloud_enable_quality_filter_ ? "enabled" : "disabled",
         pointcloud_min_observations_,
         pointcloud_min_found_ratio_);
+
+    const std::string max_distance_text = pointcloud_max_distance_ > 0.0 ? std::to_string(pointcloud_max_distance_) : "disabled";
+    RCLCPP_INFO(
+        this->get_logger(),
+        "Point cloud output transform: %s, max_distance=%s",
+        pointcloud_apply_optical_to_ros_transform_ ? "optical_to_ros" : "none",
+        max_distance_text.c_str());
 
     RCLCPP_INFO(
         this->get_logger(),
@@ -65,8 +75,13 @@ bool RgbdSlamNode::IsPointUsable(ORB_SLAM3::MapPoint *pMP) const
         return false;
     }
 
-    const Eigen::Vector3f pos = pMP->GetWorldPos();
+    const Eigen::Vector3f pos = TransformPointForOutput(pMP->GetWorldPos());
     if (!std::isfinite(pos(0)) || !std::isfinite(pos(1)) || !std::isfinite(pos(2)))
+    {
+        return false;
+    }
+
+    if (pointcloud_max_distance_ > 0.0 && pos.norm() > pointcloud_max_distance_)
     {
         return false;
     }
@@ -89,6 +104,18 @@ bool RgbdSlamNode::IsPointUsable(ORB_SLAM3::MapPoint *pMP) const
     return true;
 }
 
+Eigen::Vector3f RgbdSlamNode::TransformPointForOutput(const Eigen::Vector3f &point) const
+{
+    if (!pointcloud_apply_optical_to_ros_transform_)
+    {
+        return point;
+    }
+
+    // Convert camera optical-style axes (x right, y down, z forward)
+    // into a ROS base-like convention (x forward, y left, z up).
+    return Eigen::Vector3f(point(2), -point(0), -point(1));
+}
+
 std::vector<Eigen::Vector3f> RgbdSlamNode::CollectUsablePoints(const std::vector<ORB_SLAM3::MapPoint *> &map_points) const
 {
     std::vector<Eigen::Vector3f> points;
@@ -98,7 +125,7 @@ std::vector<Eigen::Vector3f> RgbdSlamNode::CollectUsablePoints(const std::vector
     {
         if (IsPointUsable(pMP))
         {
-            points.push_back(pMP->GetWorldPos());
+            points.push_back(TransformPointForOutput(pMP->GetWorldPos()));
         }
     }
 
