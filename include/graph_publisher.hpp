@@ -233,6 +233,9 @@ public:
 
         cov_out.close();
         ess_out.close();
+
+        RCLCPP_INFO(node_->get_logger(), "Successfully saved Covisibility Graph with %zu edges to %s", cov_edges.size(), cov_file.c_str());
+        RCLCPP_INFO(node_->get_logger(), "Successfully saved Essential Graph with %zu edges to %s", ess_edges.size(), ess_file.c_str());
     }
 
 private:
