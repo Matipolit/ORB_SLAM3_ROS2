@@ -13,6 +13,8 @@ add_link_options("-Wl,--copy-dt-needed-entries")
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(Pangolin REQUIRED)
@@ -43,7 +45,7 @@ set(ALL_LIBS
 
 macro(build_slam_node target)
   add_executable(${target} ${ARGN})
-  ament_target_dependencies(${target} rclcpp sensor_msgs cv_bridge message_filters)
+  ament_target_dependencies(${target} rclcpp sensor_msgs cv_bridge message_filters visualization_msgs geometry_msgs)
   target_link_libraries(${target} ${ALL_LIBS})
 endmacro()
 
