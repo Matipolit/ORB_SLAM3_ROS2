@@ -12,11 +12,12 @@
 #include "Tracking.h"
 
 #include "utility.hpp"
+#include "graph_publisher.hpp"
 
 class MonocularSlamNode : public rclcpp::Node
 {
 public:
-    MonocularSlamNode(ORB_SLAM3::System* pSLAM);
+    MonocularSlamNode(ORB_SLAM3::System *pSLAM);
 
     ~MonocularSlamNode();
 
@@ -25,7 +26,8 @@ private:
 
     void GrabImage(const sensor_msgs::msg::Image::SharedPtr msg);
 
-    ORB_SLAM3::System* m_SLAM;
+    ORB_SLAM3::System *m_SLAM;
+    std::shared_ptr<GraphPublisher> graph_pub_;
 
     cv_bridge::CvImagePtr m_cvImPtr;
 

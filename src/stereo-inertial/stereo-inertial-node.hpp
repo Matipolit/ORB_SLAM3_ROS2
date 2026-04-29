@@ -13,6 +13,7 @@
 #include "Tracking.h"
 
 #include "utility.hpp"
+#include "graph_publisher.hpp"
 
 using ImuMsg = sensor_msgs::msg::Imu;
 using ImageMsg = sensor_msgs::msg::Image;
@@ -20,7 +21,7 @@ using ImageMsg = sensor_msgs::msg::Image;
 class StereoInertialNode : public rclcpp::Node
 {
 public:
-    StereoInertialNode(ORB_SLAM3::System* pSLAM, const string &strSettingsFile, const string &strDoRectify, const string &strDoEqual);
+    StereoInertialNode(ORB_SLAM3::System *pSLAM, const string &strSettingsFile, const string &strDoRectify, const string &strDoEqual);
     ~StereoInertialNode();
 
 private:
@@ -30,11 +31,12 @@ private:
     cv::Mat GetImage(const ImageMsg::SharedPtr msg);
     void SyncWithImu();
 
-    rclcpp::Subscription<ImuMsg>::SharedPtr   subImu_;
+    rclcpp::Subscription<ImuMsg>::SharedPtr subImu_;
     rclcpp::Subscription<ImageMsg>::SharedPtr subImgLeft_;
     rclcpp::Subscription<ImageMsg>::SharedPtr subImgRight_;
 
     ORB_SLAM3::System *SLAM_;
+    std::shared_ptr<GraphPublisher> graph_pub_;
     std::thread *syncThread_;
 
     // IMU

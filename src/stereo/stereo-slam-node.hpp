@@ -16,11 +16,12 @@
 #include "Tracking.h"
 
 #include "utility.hpp"
+#include "graph_publisher.hpp"
 
 class StereoSlamNode : public rclcpp::Node
 {
 public:
-    StereoSlamNode(ORB_SLAM3::System* pSLAM, const string &strSettingsFile, const string &strDoRectify);
+    StereoSlamNode(ORB_SLAM3::System *pSLAM, const string &strSettingsFile, const string &strDoRectify);
 
     ~StereoSlamNode();
 
@@ -30,18 +31,19 @@ private:
 
     void GrabStereo(const sensor_msgs::msg::Image::SharedPtr msgRGB, const sensor_msgs::msg::Image::SharedPtr msgD);
 
-    ORB_SLAM3::System* m_SLAM;
+    ORB_SLAM3::System *m_SLAM;
+    std::shared_ptr<GraphPublisher> graph_pub_;
 
     bool doRectify;
-    cv::Mat M1l,M2l,M1r,M2r;
+    cv::Mat M1l, M2l, M1r, M2r;
 
     cv_bridge::CvImageConstPtr cv_ptrLeft;
     cv_bridge::CvImageConstPtr cv_ptrRight;
 
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image> > left_sub;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image> > right_sub;
+    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image>> left_sub;
+    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image>> right_sub;
 
-    std::shared_ptr<message_filters::Synchronizer<approximate_sync_policy> > syncApproximate;
+    std::shared_ptr<message_filters::Synchronizer<approximate_sync_policy>> syncApproximate;
 };
 
 #endif

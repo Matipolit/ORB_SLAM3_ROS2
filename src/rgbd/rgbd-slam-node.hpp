@@ -27,6 +27,7 @@
 #include "Tracking.h"
 
 #include "utility.hpp"
+#include "graph_publisher.hpp"
 
 class RgbdSlamNode : public rclcpp::Node
 {
@@ -62,6 +63,7 @@ private:
     bool finalized_;
 
     ORB_SLAM3::System *m_SLAM;
+    std::shared_ptr<GraphPublisher> graph_pub_;
 
     cv_bridge::CvImageConstPtr cv_ptrRGB;
     cv_bridge::CvImageConstPtr cv_ptrD;

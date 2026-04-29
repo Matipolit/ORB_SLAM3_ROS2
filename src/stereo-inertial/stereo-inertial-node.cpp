@@ -4,9 +4,8 @@
 
 using std::placeholders::_1;
 
-StereoInertialNode::StereoInertialNode(ORB_SLAM3::System *SLAM, const string &strSettingsFile, const string &strDoRectify, const string &strDoEqual) :
-    Node("ORB_SLAM3_ROS2"),
-    SLAM_(SLAM)
+StereoInertialNode::StereoInertialNode(ORB_SLAM3::System *SLAM, const string &strSettingsFile, const string &strDoRectify, const string &strDoEqual) : Node("ORB_SLAM3_ROS2"),
+                                                                                                                                                       SLAM_(SLAM)
 {
     stringstream ss_rec(strDoRectify);
     ss_rec >> boolalpha >> doRectify_;
@@ -62,6 +61,7 @@ StereoInertialNode::StereoInertialNode(ORB_SLAM3::System *SLAM, const string &st
     subImgRight_ = this->create_subscription<ImageMsg>("camera/right", 100, std::bind(&StereoInertialNode::GrabImageRight, this, _1));
 
     syncThread_ = new std::thread(&StereoInertialNode::SyncWithImu, this);
+    graph_pub_ = std::make_shared<GraphPublisher>(this);
 }
 
 StereoInertialNode::~StereoInertialNode()
@@ -72,6 +72,11 @@ StereoInertialNode::~StereoInertialNode()
 
     // Stop all threads
     SLAM_->Shutdown();
+
+    if (graph_pub_)
+    {
+        graph_pub_->SaveGraphs(SLAM_, "covisibility_graph.txt", "essential_graph.txt");
+    }
 
     // Save camera trajectory
     SLAM_->SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
@@ -170,6 +175,7 @@ void StereoInertialNode::SyncWithImu()
 
             bufMutexLeft_.lock();
             imLeft = GetImage(imgLeftBuf_.front());
+            builtin_interfaces::msg::Time stampLeft = imgLeftBuf_.front()->header.stamp;
             imgLeftBuf_.pop();
             bufMutexLeft_.unlock();
 
@@ -208,6 +214,11 @@ void StereoInertialNode::SyncWithImu()
             }
 
             SLAM_->TrackStereo(imLeft, imRight, tImLeft, vImuMeas);
+
+            if (graph_pub_)
+            {
+                graph_pub_->PublishGraphs(SLAM_, stampLeft);
+            }
 
             std::chrono::milliseconds tSleep(1);
             std::this_thread::sleep_for(tSleep);

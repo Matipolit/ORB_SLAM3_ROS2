@@ -56,6 +56,8 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
 
     syncApproximate = std::make_shared<message_filters::Synchronizer<approximate_sync_policy>>(approximate_sync_policy(10), *rgb_sub, *depth_sub);
     syncApproximate->registerCallback(&RgbdSlamNode::GrabRGBD, this);
+
+    graph_pub_ = std::make_shared<GraphPublisher>(this);
 }
 
 RgbdSlamNode::~RgbdSlamNode()
@@ -203,6 +205,11 @@ void RgbdSlamNode::FinalizeSlamAndOutputs()
     m_SLAM->Shutdown();
     ExportFinalMapPcd();
 
+    if (graph_pub_)
+    {
+        graph_pub_->SaveGraphs(m_SLAM, "covisibility_graph.txt", "essential_graph.txt");
+    }
+
     // Save camera trajectory
     m_SLAM->SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
     m_SLAM->SaveTrajectoryTUM("FrameTrajectoryTUM.txt");
@@ -238,6 +245,10 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
     m_SLAM->TrackRGBD(cv_ptrRGB->image, cv_ptrD->image, Utility::StampToSec(msgRGB->header.stamp));
     std::cout << "DEBUG: TrackRGBD finished. Now calling PublishPointCloud..." << std::endl;
     PublishPointCloud(msgRGB->header.stamp);
+    if (graph_pub_)
+    {
+        graph_pub_->PublishGraphs(m_SLAM, msgRGB->header.stamp);
+    }
 }
 
 void RgbdSlamNode::PublishPointCloud(const builtin_interfaces::msg::Time &stamp)
