@@ -110,7 +110,7 @@ void StereoSlamNode::GrabStereo(const ImageMsg::SharedPtr msgLeft, const ImageMs
         m_SLAM->TrackStereo(cv_ptrLeft->image, cv_ptrRight->image, Utility::StampToSec(msgLeft->header.stamp));
     }
 
-    if (m_SLAM->GetTrackingState() == ORB_SLAM3::System::TRACKING_OK)
+    if (m_SLAM->GetTrackingState() == 2)
     {
         if (graph_pub_)
         {

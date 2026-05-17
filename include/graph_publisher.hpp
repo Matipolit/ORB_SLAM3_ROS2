@@ -12,7 +12,6 @@
 #include "System.h"
 #include "MapPoint.h"
 #include "KeyFrame.h"
-#include "Atlas.h"
 
 class GraphPublisher
 {
@@ -35,19 +34,19 @@ public:
             return;
         }
 
-        std::vector<ORB_SLAM3::Map*> maps = pSLAM->GetAtlas()->GetAllMaps();
+        std::vector<ORB_SLAM3::MapPoint *> all_map_points = pSLAM->GetAllMapPoints();
         std::set<ORB_SLAM3::KeyFrame *> keyframes;
 
-        for (auto pMap : maps)
+        for (auto pMP : all_map_points)
         {
-            if (pMap)
+            if (pMP && !pMP->isBad())
             {
-                std::vector<ORB_SLAM3::KeyFrame*> kfs = pMap->GetAllKeyFrames();
-                for (auto pKF : kfs)
+                auto obs = pMP->GetObservations();
+                for (auto const &item : obs)
                 {
-                    if (pKF && !pKF->isBad())
+                    if (item.first && !item.first->isBad())
                     {
-                        keyframes.insert(pKF);
+                        keyframes.insert(item.first);
                     }
                 }
             }
@@ -165,19 +164,19 @@ public:
     }
     void SaveGraphs(ORB_SLAM3::System *pSLAM, const std::string &cov_file, const std::string &ess_file)
     {
-        std::vector<ORB_SLAM3::Map*> maps = pSLAM->GetAtlas()->GetAllMaps();
+        std::vector<ORB_SLAM3::MapPoint *> all_map_points = pSLAM->GetAllMapPoints();
         std::set<ORB_SLAM3::KeyFrame *> keyframes;
 
-        for (auto pMap : maps)
+        for (auto pMP : all_map_points)
         {
-            if (pMap)
+            if (pMP && !pMP->isBad())
             {
-                std::vector<ORB_SLAM3::KeyFrame*> kfs = pMap->GetAllKeyFrames();
-                for (auto pKF : kfs)
+                auto obs = pMP->GetObservations();
+                for (auto const &item : obs)
                 {
-                    if (pKF && !pKF->isBad())
+                    if (item.first && !item.first->isBad())
                     {
-                        keyframes.insert(pKF);
+                        keyframes.insert(item.first);
                     }
                 }
             }

@@ -245,7 +245,7 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
     m_SLAM->TrackRGBD(cv_ptrRGB->image, cv_ptrD->image, Utility::StampToSec(msgRGB->header.stamp));
     
     // Check tracking state before publishing
-    if (m_SLAM->GetTrackingState() == ORB_SLAM3::System::TRACKING_OK)
+    if (m_SLAM->GetTrackingState() == 2)
     {
         std::cout << "DEBUG: TrackRGBD finished. Now calling PublishPointCloud..." << std::endl;
         PublishPointCloud(msgRGB->header.stamp);
