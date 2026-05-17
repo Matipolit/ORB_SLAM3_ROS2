@@ -34,9 +34,14 @@ public:
             return;
         }
 
-        std::vector<ORB_SLAM3::MapPoint *> all_map_points = pSLAM->GetAllMapPoints();
-        std::set<ORB_SLAM3::KeyFrame *> keyframes;
+        // Rate limit: Only publish every 10 frames to reduce overhead and race risks
+        static int frame_count = 0;
+        if (++frame_count % 10 != 0) return;
 
+        std::vector<ORB_SLAM3::MapPoint *> all_map_points = pSLAM->GetAllMapPoints();
+        if (all_map_points.empty()) return;
+
+        std::set<ORB_SLAM3::KeyFrame *> keyframes;
         for (auto pMP : all_map_points)
         {
             if (pMP && !pMP->isBad())
@@ -89,9 +94,15 @@ public:
             if (!pKF || pKF->isBad())
                 continue;
 
+            // CRITICAL: Check if the pose is valid BEFORE calling Sophus methods like GetPoseInverse()
+            // In many ORB-SLAM3 forks, GetPose() returns the raw SE3 object.
+            Sophus::SE3f Tcw = pKF->GetPose();
+            Eigen::Vector3f t = Tcw.translation();
+            if (!std::isfinite(t.x()) || !std::isfinite(t.y()) || !std::isfinite(t.z()))
+                continue;
+
             Sophus::SE3f T1 = pKF->GetPoseInverse();
             Eigen::Vector3f trans1 = T1.translation();
-            
             if (!std::isfinite(trans1.x()) || !std::isfinite(trans1.y()) || !std::isfinite(trans1.z()))
                 continue;
 
@@ -105,6 +116,10 @@ public:
             {
                 if (!kf2 || kf2->isBad())
                     return;
+
+                Sophus::SE3f Tcw2 = kf2->GetPose();
+                if (!std::isfinite(Tcw2.translation().x())) return;
+
                 long unsigned int id1 = pKF->mnId;
                 long unsigned int id2 = kf2->mnId;
                 if (id1 > id2)

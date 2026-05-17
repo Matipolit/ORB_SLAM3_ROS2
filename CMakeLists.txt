@@ -8,6 +8,8 @@ if(NOT CMAKE_CXX_STANDARD)
 endif()
 
 add_compile_options(-Wall -Wextra -Wpedantic)
+add_definitions(-DORB_SLAM3_VERSION="1.1.0-hardened")
+add_definitions(-DORB_SLAM3_LIB_PATH="${ORB_SLAM3_ROOT_DIR}")
 add_link_options("-Wl,--copy-dt-needed-entries")
 
 find_package(ament_cmake REQUIRED)

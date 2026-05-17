@@ -43,6 +43,12 @@ int main(int argc, char **argv)
 
     rclcpp::init(argc, argv);
 
+    std::cout << "==========================================================" << std::endl;
+    std::cout << "ORB-SLAM3 ROS2 Wrapper Version: " << ORB_SLAM3_VERSION << std::endl;
+    std::cout << "Built against ORB-SLAM3 at: " << ORB_SLAM3_LIB_PATH << std::endl;
+    std::cout << "Mode: RGB-D" << std::endl;
+    std::cout << "==========================================================" << std::endl;
+
     // malloc error using new.. try shared ptr
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
 
