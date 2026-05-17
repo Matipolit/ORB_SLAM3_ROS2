@@ -243,11 +243,16 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
     }
 
     m_SLAM->TrackRGBD(cv_ptrRGB->image, cv_ptrD->image, Utility::StampToSec(msgRGB->header.stamp));
-    std::cout << "DEBUG: TrackRGBD finished. Now calling PublishPointCloud..." << std::endl;
-    PublishPointCloud(msgRGB->header.stamp);
-    if (graph_pub_)
+    
+    // Check tracking state before publishing
+    if (m_SLAM->GetTrackingState() == ORB_SLAM3::System::TRACKING_OK)
     {
-        graph_pub_->PublishGraphs(m_SLAM, msgRGB->header.stamp);
+        std::cout << "DEBUG: TrackRGBD finished. Now calling PublishPointCloud..." << std::endl;
+        PublishPointCloud(msgRGB->header.stamp);
+        if (graph_pub_)
+        {
+            graph_pub_->PublishGraphs(m_SLAM, msgRGB->header.stamp);
+        }
     }
 }
 

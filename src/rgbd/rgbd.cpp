@@ -46,10 +46,10 @@ int main(int argc, char **argv)
     // malloc error using new.. try shared ptr
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
 
-    bool visualization = true;
+    bool visualization = false;
     {
         auto bootstrap_node = std::make_shared<rclcpp::Node>("orbslam3_rgbd_bootstrap");
-        visualization = bootstrap_node->declare_parameter<bool>("enable_viewer", true);
+        visualization = bootstrap_node->declare_parameter<bool>("enable_viewer", false);
 
         const char *viewer_env = std::getenv("ORB_SLAM3_ENABLE_VIEWER");
         if (viewer_env != nullptr)

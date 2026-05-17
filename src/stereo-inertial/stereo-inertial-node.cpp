@@ -215,9 +215,12 @@ void StereoInertialNode::SyncWithImu()
 
             SLAM_->TrackStereo(imLeft, imRight, tImLeft, vImuMeas);
 
-            if (graph_pub_)
+            if (SLAM_->GetTrackingState() == ORB_SLAM3::System::TRACKING_OK)
             {
-                graph_pub_->PublishGraphs(SLAM_, stampLeft);
+                if (graph_pub_)
+                {
+                    graph_pub_->PublishGraphs(SLAM_, stampLeft);
+                }
             }
 
             std::chrono::milliseconds tSleep(1);

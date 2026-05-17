@@ -12,6 +12,7 @@
 #include "System.h"
 #include "MapPoint.h"
 #include "KeyFrame.h"
+#include "Atlas.h"
 
 class GraphPublisher
 {
@@ -34,19 +35,19 @@ public:
             return;
         }
 
-        std::vector<ORB_SLAM3::MapPoint *> all_map_points = pSLAM->GetAllMapPoints();
+        std::vector<ORB_SLAM3::Map*> maps = pSLAM->GetAtlas()->GetAllMaps();
         std::set<ORB_SLAM3::KeyFrame *> keyframes;
 
-        for (auto pMP : all_map_points)
+        for (auto pMap : maps)
         {
-            if (pMP && !pMP->isBad())
+            if (pMap)
             {
-                auto obs = pMP->GetObservations();
-                for (auto const &item : obs)
+                std::vector<ORB_SLAM3::KeyFrame*> kfs = pMap->GetAllKeyFrames();
+                for (auto pKF : kfs)
                 {
-                    if (item.first && !item.first->isBad())
+                    if (pKF && !pKF->isBad())
                     {
-                        keyframes.insert(item.first);
+                        keyframes.insert(pKF);
                     }
                 }
             }
@@ -89,7 +90,13 @@ public:
             if (!pKF || pKF->isBad())
                 continue;
 
-            Eigen::Vector3f pw1 = TransformPointForOutput(pKF->GetPoseInverse().translation());
+            Sophus::SE3f T1 = pKF->GetPoseInverse();
+            Eigen::Vector3f trans1 = T1.translation();
+            
+            if (!std::isfinite(trans1.x()) || !std::isfinite(trans1.y()) || !std::isfinite(trans1.z()))
+                continue;
+
+            Eigen::Vector3f pw1 = TransformPointForOutput(trans1);
             geometry_msgs::msg::Point p1;
             p1.x = pw1.x();
             p1.y = pw1.y();
@@ -107,7 +114,13 @@ public:
                     return;
                 edge_set.insert({id1, id2});
 
-                Eigen::Vector3f pw2 = TransformPointForOutput(kf2->GetPoseInverse().translation());
+                Sophus::SE3f T2 = kf2->GetPoseInverse();
+                Eigen::Vector3f trans2 = T2.translation();
+                
+                if (!std::isfinite(trans2.x()) || !std::isfinite(trans2.y()) || !std::isfinite(trans2.z()))
+                    return;
+
+                Eigen::Vector3f pw2 = TransformPointForOutput(trans2);
                 geometry_msgs::msg::Point p2;
                 p2.x = pw2.x();
                 p2.y = pw2.y();
@@ -152,19 +165,19 @@ public:
     }
     void SaveGraphs(ORB_SLAM3::System *pSLAM, const std::string &cov_file, const std::string &ess_file)
     {
-        std::vector<ORB_SLAM3::MapPoint *> all_map_points = pSLAM->GetAllMapPoints();
+        std::vector<ORB_SLAM3::Map*> maps = pSLAM->GetAtlas()->GetAllMaps();
         std::set<ORB_SLAM3::KeyFrame *> keyframes;
 
-        for (auto pMP : all_map_points)
+        for (auto pMap : maps)
         {
-            if (pMP && !pMP->isBad())
+            if (pMap)
             {
-                auto obs = pMP->GetObservations();
-                for (auto const &item : obs)
+                std::vector<ORB_SLAM3::KeyFrame*> kfs = pMap->GetAllKeyFrames();
+                for (auto pKF : kfs)
                 {
-                    if (item.first && !item.first->isBad())
+                    if (pKF && !pKF->isBad())
                     {
-                        keyframes.insert(item.first);
+                        keyframes.insert(pKF);
                     }
                 }
             }
@@ -184,7 +197,13 @@ public:
             if (!pKF || pKF->isBad())
                 continue;
 
-            Eigen::Vector3f pw1 = TransformPointForOutput(pKF->GetPoseInverse().translation());
+            Sophus::SE3f T1 = pKF->GetPoseInverse();
+            Eigen::Vector3f trans1 = T1.translation();
+            
+            if (!std::isfinite(trans1.x()) || !std::isfinite(trans1.y()) || !std::isfinite(trans1.z()))
+                continue;
+
+            Eigen::Vector3f pw1 = TransformPointForOutput(trans1);
 
             auto add_edge = [&](ORB_SLAM3::KeyFrame *kf2, std::ofstream &out, std::set<std::pair<long unsigned int, long unsigned int>> &edge_set)
             {
@@ -198,7 +217,13 @@ public:
                     return;
                 edge_set.insert({id1, id2});
 
-                Eigen::Vector3f pw2 = TransformPointForOutput(kf2->GetPoseInverse().translation());
+                Sophus::SE3f T2 = kf2->GetPoseInverse();
+                Eigen::Vector3f trans2 = T2.translation();
+                
+                if (!std::isfinite(trans2.x()) || !std::isfinite(trans2.y()) || !std::isfinite(trans2.z()))
+                    return;
+
+                Eigen::Vector3f pw2 = TransformPointForOutput(trans2);
                 out << pw1.x() << " " << pw1.y() << " " << pw1.z() << " "
                     << pw2.x() << " " << pw2.y() << " " << pw2.z() << "\n";
             };
