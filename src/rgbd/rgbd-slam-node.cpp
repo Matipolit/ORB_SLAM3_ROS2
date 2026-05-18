@@ -3,12 +3,38 @@
 #include <cmath>
 #include <iomanip>
 #include <opencv2/core/core.hpp>
+#include <sensor_msgs/image_encodings.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 
 #include "MapPoint.h"
 #include "Atlas.h"
 
 using std::placeholders::_1;
+
+namespace
+{
+    bool DepthEncodingLooksSupported(const std::string &encoding)
+    {
+        return encoding == sensor_msgs::image_encodings::TYPE_16UC1 ||
+               encoding == sensor_msgs::image_encodings::TYPE_32FC1;
+    }
+
+    bool DepthHasNonFiniteValues(const cv::Mat &depth, cv::Point *bad_pos)
+    {
+        if (depth.empty())
+        {
+            return true;
+        }
+
+        const int depth_type = depth.depth();
+        if (depth_type == CV_32F || depth_type == CV_64F)
+        {
+            return !cv::checkRange(depth, true, bad_pos);
+        }
+
+        return false;
+    }
+}
 
 RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
     : Node("ORB_SLAM3_ROS2"),
@@ -242,8 +268,42 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
         return;
     }
 
+    if (cv_ptrD->image.empty())
+    {
+        RCLCPP_ERROR(this->get_logger(), "Depth image is empty. Skipping frame.");
+        return;
+    }
+
+    static bool logged_depth_encoding = false;
+    if (!logged_depth_encoding && !DepthEncodingLooksSupported(msgD->encoding))
+    {
+        RCLCPP_WARN(
+            this->get_logger(),
+            "Unexpected depth encoding '%s'. Expected 16UC1 or 32FC1.",
+            msgD->encoding.c_str());
+        logged_depth_encoding = true;
+    }
+
+    cv::Point bad_pos;
+    if (DepthHasNonFiniteValues(cv_ptrD->image, &bad_pos))
+    {
+        double min_val = 0.0;
+        double max_val = 0.0;
+        cv::minMaxLoc(cv_ptrD->image, &min_val, &max_val);
+        RCLCPP_ERROR(
+            this->get_logger(),
+            "Depth image has non-finite values (encoding=%s, type=%d, bad_pos=%d,%d, min=%.6f, max=%.6f). Skipping frame.",
+            msgD->encoding.c_str(),
+            cv_ptrD->image.type(),
+            bad_pos.x,
+            bad_pos.y,
+            min_val,
+            max_val);
+        return;
+    }
+
     m_SLAM->TrackRGBD(cv_ptrRGB->image, cv_ptrD->image, Utility::StampToSec(msgRGB->header.stamp));
-    
+
     // Check tracking state before publishing
     if (m_SLAM->GetTrackingState() == 2)
     {

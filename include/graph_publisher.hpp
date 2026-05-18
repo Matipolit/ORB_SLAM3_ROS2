@@ -8,6 +8,7 @@
 #include <vector>
 #include <utility>
 #include <fstream>
+#include <cmath>
 
 #include "System.h"
 #include "MapPoint.h"
@@ -36,10 +37,12 @@ public:
 
         // Rate limit: Only publish every 10 frames to reduce overhead and race risks
         static int frame_count = 0;
-        if (++frame_count % 10 != 0) return;
+        if (++frame_count % 10 != 0)
+            return;
 
         std::vector<ORB_SLAM3::MapPoint *> all_map_points = pSLAM->GetAllMapPoints();
-        if (all_map_points.empty()) return;
+        if (all_map_points.empty())
+            return;
 
         std::set<ORB_SLAM3::KeyFrame *> keyframes;
         for (auto pMP : all_map_points)
@@ -94,17 +97,12 @@ public:
             if (!pKF || pKF->isBad())
                 continue;
 
-            // CRITICAL: Check if the pose is valid BEFORE calling Sophus methods like GetPoseInverse()
-            // In many ORB-SLAM3 forks, GetPose() returns the raw SE3 object.
-            Sophus::SE3f Tcw = pKF->GetPose();
-            Eigen::Vector3f t = Tcw.translation();
-            if (!std::isfinite(t.x()) || !std::isfinite(t.y()) || !std::isfinite(t.z()))
+            const Sophus::SE3f Tcw = pKF->GetPose();
+            if (!IsPoseFinite(Tcw))
                 continue;
 
-            Sophus::SE3f T1 = pKF->GetPoseInverse();
-            Eigen::Vector3f trans1 = T1.translation();
-            if (!std::isfinite(trans1.x()) || !std::isfinite(trans1.y()) || !std::isfinite(trans1.z()))
-                continue;
+            const Sophus::SE3f T1 = Tcw.inverse();
+            const Eigen::Vector3f trans1 = T1.translation();
 
             Eigen::Vector3f pw1 = TransformPointForOutput(trans1);
             geometry_msgs::msg::Point p1;
@@ -117,8 +115,9 @@ public:
                 if (!kf2 || kf2->isBad())
                     return;
 
-                Sophus::SE3f Tcw2 = kf2->GetPose();
-                if (!std::isfinite(Tcw2.translation().x())) return;
+                const Sophus::SE3f Tcw2 = kf2->GetPose();
+                if (!IsPoseFinite(Tcw2))
+                    return;
 
                 long unsigned int id1 = pKF->mnId;
                 long unsigned int id2 = kf2->mnId;
@@ -128,11 +127,8 @@ public:
                     return;
                 edge_set.insert({id1, id2});
 
-                Sophus::SE3f T2 = kf2->GetPoseInverse();
-                Eigen::Vector3f trans2 = T2.translation();
-                
-                if (!std::isfinite(trans2.x()) || !std::isfinite(trans2.y()) || !std::isfinite(trans2.z()))
-                    return;
+                const Sophus::SE3f T2 = Tcw2.inverse();
+                const Eigen::Vector3f trans2 = T2.translation();
 
                 Eigen::Vector3f pw2 = TransformPointForOutput(trans2);
                 geometry_msgs::msg::Point p2;
@@ -211,11 +207,12 @@ public:
             if (!pKF || pKF->isBad())
                 continue;
 
-            Sophus::SE3f T1 = pKF->GetPoseInverse();
-            Eigen::Vector3f trans1 = T1.translation();
-            
-            if (!std::isfinite(trans1.x()) || !std::isfinite(trans1.y()) || !std::isfinite(trans1.z()))
+            const Sophus::SE3f Tcw = pKF->GetPose();
+            if (!IsPoseFinite(Tcw))
                 continue;
+
+            const Sophus::SE3f T1 = Tcw.inverse();
+            const Eigen::Vector3f trans1 = T1.translation();
 
             Eigen::Vector3f pw1 = TransformPointForOutput(trans1);
 
@@ -231,11 +228,12 @@ public:
                     return;
                 edge_set.insert({id1, id2});
 
-                Sophus::SE3f T2 = kf2->GetPoseInverse();
-                Eigen::Vector3f trans2 = T2.translation();
-                
-                if (!std::isfinite(trans2.x()) || !std::isfinite(trans2.y()) || !std::isfinite(trans2.z()))
+                const Sophus::SE3f Tcw2 = kf2->GetPose();
+                if (!IsPoseFinite(Tcw2))
                     return;
+
+                const Sophus::SE3f T2 = Tcw2.inverse();
+                const Eigen::Vector3f trans2 = T2.translation();
 
                 Eigen::Vector3f pw2 = TransformPointForOutput(trans2);
                 out << pw1.x() << " " << pw1.y() << " " << pw1.z() << " "
@@ -278,6 +276,17 @@ public:
     }
 
 private:
+    static bool IsPoseFinite(const Sophus::SE3f &pose)
+    {
+        const Eigen::Vector3f t = pose.translation();
+        if (!std::isfinite(t.x()) || !std::isfinite(t.y()) || !std::isfinite(t.z()))
+            return false;
+
+        const auto q = pose.so3().unit_quaternion();
+        const auto qc = q.coeffs();
+        return std::isfinite(qc.x()) && std::isfinite(qc.y()) && std::isfinite(qc.z()) && std::isfinite(qc.w());
+    }
+
     rclcpp::Node *node_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr covisibility_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr essential_pub_;
