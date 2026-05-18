@@ -34,6 +34,63 @@ namespace
 
         return false;
     }
+
+    cv::Mat SanitizeDepthImage(const cv::Mat &depth, size_t *invalid_count)
+    {
+        if (invalid_count)
+        {
+            *invalid_count = 0;
+        }
+
+        if (depth.empty())
+        {
+            return depth;
+        }
+
+        if (depth.depth() == CV_32F)
+        {
+            cv::Mat sanitized = depth.clone();
+            for (int y = 0; y < sanitized.rows; ++y)
+            {
+                float *row = sanitized.ptr<float>(y);
+                for (int x = 0; x < sanitized.cols; ++x)
+                {
+                    if (!std::isfinite(row[x]))
+                    {
+                        row[x] = 0.0f;
+                        if (invalid_count)
+                        {
+                            ++(*invalid_count);
+                        }
+                    }
+                }
+            }
+            return sanitized;
+        }
+
+        if (depth.depth() == CV_64F)
+        {
+            cv::Mat sanitized = depth.clone();
+            for (int y = 0; y < sanitized.rows; ++y)
+            {
+                double *row = sanitized.ptr<double>(y);
+                for (int x = 0; x < sanitized.cols; ++x)
+                {
+                    if (!std::isfinite(row[x]))
+                    {
+                        row[x] = 0.0;
+                        if (invalid_count)
+                        {
+                            ++(*invalid_count);
+                        }
+                    }
+                }
+            }
+            return sanitized;
+        }
+
+        return depth;
+    }
 }
 
 RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
@@ -284,25 +341,31 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
         logged_depth_encoding = true;
     }
 
+    cv::Mat depth_for_slam = cv_ptrD->image;
     cv::Point bad_pos;
     if (DepthHasNonFiniteValues(cv_ptrD->image, &bad_pos))
     {
+        size_t invalid_count = 0;
+        depth_for_slam = SanitizeDepthImage(cv_ptrD->image, &invalid_count);
+
         double min_val = 0.0;
         double max_val = 0.0;
-        cv::minMaxLoc(cv_ptrD->image, &min_val, &max_val);
-        RCLCPP_ERROR(
+        cv::minMaxLoc(depth_for_slam, &min_val, &max_val);
+        RCLCPP_WARN_THROTTLE(
             this->get_logger(),
-            "Depth image has non-finite values (encoding=%s, type=%d, bad_pos=%d,%d, min=%.6f, max=%.6f). Skipping frame.",
+            *this->get_clock(),
+            5000,
+            "Depth image has non-finite values (encoding=%s, type=%d, bad_pos=%d,%d, invalid=%zu, min=%.6f, max=%.6f). Replacing with 0.",
             msgD->encoding.c_str(),
             cv_ptrD->image.type(),
             bad_pos.x,
             bad_pos.y,
+            invalid_count,
             min_val,
             max_val);
-        return;
     }
 
-    m_SLAM->TrackRGBD(cv_ptrRGB->image, cv_ptrD->image, Utility::StampToSec(msgRGB->header.stamp));
+    m_SLAM->TrackRGBD(cv_ptrRGB->image, depth_for_slam, Utility::StampToSec(msgRGB->header.stamp));
 
     // Check tracking state before publishing
     if (m_SLAM->GetTrackingState() == 2)
