@@ -56,7 +56,7 @@ $ source ~/colcon_ws/install/local_setup.bash
 ```
 
 2. Run orbslam mode, which you want.  
-This repository only support `MONO, STEREO, RGBD, STEREO-INERTIAL` mode now.  
+This repository only support `MONO, STEREO, RGBD (optionally IMU), STEREO-INERTIAL` mode now.  
 You can find vocabulary file and config file in here. (e.g. `orbslam3_ros2/vocabulary/ORBvoc.txt`, `orbslam3_ros2/config/monocular/TUM1.yaml` for monocular SLAM).
   - `MONO` mode  
 ```
@@ -70,6 +70,11 @@ $ ros2 run orbslam3 stereo PATH_TO_VOCABULARY PATH_TO_YAML_CONFIG_FILE BOOL_RECT
 ```
 $ ros2 run orbslam3 rgbd PATH_TO_VOCABULARY PATH_TO_YAML_CONFIG_FILE
 ```
+    - Enable IMU for RGB-D (uses ORB-SLAM3 `IMU_RGBD` sensor mode, IMU topic `imu`)  
+  ```
+  $ ros2 run orbslam3 rgbd PATH_TO_VOCABULARY PATH_TO_YAML_CONFIG_FILE --ros-args -p use_imu:=true
+  ```
+      (or set `ORB_SLAM3_USE_IMU=true`)
   - `STEREO-INERTIAL` mode  
 ```
 $ ros2 run orbslam3 stereo-inertial PATH_TO_VOCABULARY PATH_TO_YAML_CONFIG_FILE BOOL_RECTIFY [BOOL_EQUALIZE]

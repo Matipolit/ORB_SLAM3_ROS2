@@ -53,9 +53,11 @@ int main(int argc, char **argv)
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
 
     bool visualization = false;
+    bool use_imu = false;
     {
         auto bootstrap_node = std::make_shared<rclcpp::Node>("orbslam3_rgbd_bootstrap");
         visualization = bootstrap_node->declare_parameter<bool>("enable_viewer", false);
+        use_imu = bootstrap_node->declare_parameter<bool>("use_imu", false);
 
         const char *viewer_env = std::getenv("ORB_SLAM3_ENABLE_VIEWER");
         if (viewer_env != nullptr)
@@ -63,15 +65,27 @@ int main(int argc, char **argv)
             visualization = ParseBool(viewer_env, visualization);
         }
 
+        const char *imu_env = std::getenv("ORB_SLAM3_USE_IMU");
+        if (imu_env != nullptr)
+        {
+            use_imu = ParseBool(imu_env, use_imu);
+        }
+
         RCLCPP_INFO(
             bootstrap_node->get_logger(),
             "ORB-SLAM3 RGB-D viewer: %s (set 'enable_viewer' param or ORB_SLAM3_ENABLE_VIEWER env)",
             visualization ? "enabled" : "disabled");
+
+        RCLCPP_INFO(
+            bootstrap_node->get_logger(),
+            "ORB-SLAM3 RGB-D IMU: %s (set 'use_imu' param or ORB_SLAM3_USE_IMU env)",
+            use_imu ? "enabled" : "disabled");
     }
 
-    ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::RGBD, visualization);
+    const auto sensor = use_imu ? ORB_SLAM3::System::IMU_RGBD : ORB_SLAM3::System::RGBD;
+    ORB_SLAM3::System SLAM(argv[1], argv[2], sensor, visualization);
 
-    auto node = std::make_shared<RgbdSlamNode>(&SLAM);
+    auto node = std::make_shared<RgbdSlamNode>(&SLAM, use_imu);
     std::cout << "============================ " << std::endl;
 
     rclcpp::spin(node);

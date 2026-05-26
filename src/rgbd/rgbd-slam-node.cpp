@@ -93,9 +93,10 @@ namespace
     }
 }
 
-RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
+RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM, bool use_imu)
     : Node("ORB_SLAM3_ROS2"),
-      m_SLAM(pSLAM)
+      m_SLAM(pSLAM),
+      use_imu_(use_imu)
 {
     pcl_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("orb_slam3/point_cloud", 10);
     finalized_ = false;
@@ -109,6 +110,16 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
     pointcloud_apply_optical_to_ros_transform_ = this->declare_parameter<bool>("pointcloud_apply_optical_to_ros_transform", true);
     export_final_map_pcd_ = this->declare_parameter<bool>("export_final_map_pcd", true);
     final_map_pcd_path_ = this->declare_parameter<std::string>("final_map_pcd_path", "orbslam3_final_map.pcd");
+
+    const bool declared_use_imu = this->declare_parameter<bool>("use_imu", use_imu_);
+    if (declared_use_imu != use_imu_)
+    {
+        RCLCPP_WARN(
+            this->get_logger(),
+            "use_imu parameter (%s) differs from SLAM sensor mode (%s). Using sensor mode value.",
+            declared_use_imu ? "true" : "false",
+            use_imu_ ? "true" : "false");
+    }
 
     RCLCPP_INFO(
         this->get_logger(),
@@ -130,12 +141,22 @@ RgbdSlamNode::RgbdSlamNode(ORB_SLAM3::System *pSLAM)
         export_final_map_pcd_ ? "enabled" : "disabled",
         final_map_pcd_path_.c_str());
 
+    RCLCPP_INFO(
+        this->get_logger(),
+        "RGB-D IMU support: %s (topic=imu)",
+        use_imu_ ? "enabled" : "disabled");
+
     rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
     auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 10), qos_profile);
 
     // Let's use SystemDefaultsQoS which is more forgiving, or specifically SensorDataQoS
     rgb_sub = std::make_shared<message_filters::Subscriber<ImageMsg>>(this, "camera/rgb", rclcpp::SensorDataQoS().get_rmw_qos_profile());
     depth_sub = std::make_shared<message_filters::Subscriber<ImageMsg>>(this, "camera/depth", rclcpp::SensorDataQoS().get_rmw_qos_profile());
+
+    if (use_imu_)
+    {
+        imu_sub_ = this->create_subscription<ImuMsg>("imu", rclcpp::SensorDataQoS(), std::bind(&RgbdSlamNode::GrabImu, this, _1));
+    }
 
     syncApproximate = std::make_shared<message_filters::Synchronizer<approximate_sync_policy>>(approximate_sync_policy(10), *rgb_sub, *depth_sub);
     syncApproximate->registerCallback(&RgbdSlamNode::GrabRGBD, this);
@@ -151,6 +172,51 @@ RgbdSlamNode::~RgbdSlamNode()
 void RgbdSlamNode::FinalizeAndSaveOutputs()
 {
     FinalizeSlamAndOutputs();
+}
+
+void RgbdSlamNode::GrabImu(const ImuMsg::SharedPtr msg)
+{
+    std::lock_guard<std::mutex> lock(imu_mutex_);
+    imu_buf_.push(msg);
+}
+
+bool RgbdSlamNode::FillImuMeasurements(double timestamp, std::vector<ORB_SLAM3::IMU::Point> *measurements)
+{
+    if (!measurements)
+    {
+        return false;
+    }
+
+    measurements->clear();
+
+    std::lock_guard<std::mutex> lock(imu_mutex_);
+    if (imu_buf_.empty())
+    {
+        return false;
+    }
+
+    if (Utility::StampToSec(imu_buf_.back()->header.stamp) < timestamp)
+    {
+        return false;
+    }
+
+    while (!imu_buf_.empty() && Utility::StampToSec(imu_buf_.front()->header.stamp) <= timestamp)
+    {
+        const auto &imu_msg = imu_buf_.front();
+        const double t = Utility::StampToSec(imu_msg->header.stamp);
+        cv::Point3f acc(
+            imu_msg->linear_acceleration.x,
+            imu_msg->linear_acceleration.y,
+            imu_msg->linear_acceleration.z);
+        cv::Point3f gyr(
+            imu_msg->angular_velocity.x,
+            imu_msg->angular_velocity.y,
+            imu_msg->angular_velocity.z);
+        measurements->push_back(ORB_SLAM3::IMU::Point(acc, gyr, t));
+        imu_buf_.pop();
+    }
+
+    return true;
 }
 
 bool RgbdSlamNode::IsPointUsable(ORB_SLAM3::MapPoint *pMP) const
@@ -365,7 +431,23 @@ void RgbdSlamNode::GrabRGBD(const ImageMsg::SharedPtr msgRGB, const ImageMsg::Sh
             max_val);
     }
 
-    m_SLAM->TrackRGBD(cv_ptrRGB->image, depth_for_slam, Utility::StampToSec(msgRGB->header.stamp));
+    const double timestamp = Utility::StampToSec(msgRGB->header.stamp);
+    std::vector<ORB_SLAM3::IMU::Point> imu_meas;
+    if (use_imu_)
+    {
+        if (!FillImuMeasurements(timestamp, &imu_meas))
+        {
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(),
+                *this->get_clock(),
+                2000,
+                "Waiting for IMU data up to t=%.6f.",
+                timestamp);
+            return;
+        }
+    }
+
+    m_SLAM->TrackRGBD(cv_ptrRGB->image, depth_for_slam, timestamp, imu_meas);
 
     // Check tracking state before publishing
     if (m_SLAM->GetTrackingState() == 2)

@@ -7,9 +7,12 @@
 #include <chrono>
 #include <string>
 #include <vector>
+#include <queue>
+#include <mutex>
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/image.hpp"
+#include "sensor_msgs/msg/imu.hpp"
 
 #include "message_filters/subscriber.h"
 #include "message_filters/synchronizer.h"
@@ -32,7 +35,7 @@
 class RgbdSlamNode : public rclcpp::Node
 {
 public:
-    RgbdSlamNode(ORB_SLAM3::System *pSLAM);
+    RgbdSlamNode(ORB_SLAM3::System *pSLAM, bool use_imu);
 
     ~RgbdSlamNode();
 
@@ -40,9 +43,12 @@ public:
 
 private:
     using ImageMsg = sensor_msgs::msg::Image;
+    using ImuMsg = sensor_msgs::msg::Imu;
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::Image, sensor_msgs::msg::Image> approximate_sync_policy;
 
     void GrabRGBD(const sensor_msgs::msg::Image::SharedPtr msgRGB, const sensor_msgs::msg::Image::SharedPtr msgD);
+    void GrabImu(const ImuMsg::SharedPtr msg);
+    bool FillImuMeasurements(double timestamp, std::vector<ORB_SLAM3::IMU::Point> *measurements);
 
     void PublishPointCloud(const builtin_interfaces::msg::Time &stamp);
     bool IsPointUsable(ORB_SLAM3::MapPoint *pMP) const;
@@ -70,6 +76,10 @@ private:
 
     std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image>> rgb_sub;
     std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image>> depth_sub;
+    rclcpp::Subscription<ImuMsg>::SharedPtr imu_sub_;
+    std::queue<ImuMsg::SharedPtr> imu_buf_;
+    std::mutex imu_mutex_;
+    bool use_imu_;
 
     std::shared_ptr<message_filters::Synchronizer<approximate_sync_policy>> syncApproximate;
 };
