@@ -192,6 +192,17 @@ void StereoInertialNode::SyncWithImu()
                 vImuMeas.clear();
                 while (!imuBuf_.empty() && Utility::StampToSec(imuBuf_.front()->header.stamp) <= tImLeft)
                 {
+                    if (!Utility::IsFinite(imuBuf_.front()->linear_acceleration) || !Utility::IsFinite(imuBuf_.front()->angular_velocity))
+                    {
+                        RCLCPP_WARN_THROTTLE(
+                            this->get_logger(),
+                            *this->get_clock(),
+                            5000,
+                            "IMU measurement has non-finite values. Skipping.");
+                        imuBuf_.pop();
+                        continue;
+                    }
+
                     double t = Utility::StampToSec(imuBuf_.front()->header.stamp);
                     cv::Point3f acc(imuBuf_.front()->linear_acceleration.x, imuBuf_.front()->linear_acceleration.y, imuBuf_.front()->linear_acceleration.z);
                     cv::Point3f gyr(imuBuf_.front()->angular_velocity.x, imuBuf_.front()->angular_velocity.y, imuBuf_.front()->angular_velocity.z);

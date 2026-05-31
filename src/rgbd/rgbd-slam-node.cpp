@@ -203,6 +203,18 @@ bool RgbdSlamNode::FillImuMeasurements(double timestamp, std::vector<ORB_SLAM3::
     while (!imu_buf_.empty() && Utility::StampToSec(imu_buf_.front()->header.stamp) <= timestamp)
     {
         const auto &imu_msg = imu_buf_.front();
+
+        if (!Utility::IsFinite(imu_msg->linear_acceleration) || !Utility::IsFinite(imu_msg->angular_velocity))
+        {
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(),
+                *this->get_clock(),
+                5000,
+                "IMU measurement has non-finite values. Skipping.");
+            imu_buf_.pop();
+            continue;
+        }
+
         const double t = Utility::StampToSec(imu_msg->header.stamp);
         cv::Point3f acc(
             imu_msg->linear_acceleration.x,
